@@ -67,10 +67,11 @@ parameter               IDLE           = 3'd0,
 
 reg                     sm_rel_ctrl;
 reg                     sm_rel_wren;
+reg						sm_rel_ctrl_mask;
+reg						sm_rel_ctrl_mask_clr;
+reg						sm_rel_ctrl_mask_set;
 
-reg                     rden_r1;
 reg                     int_rden;
-reg                     int_rden_r1;
 reg                     load_req_r1;
 reg  [RAM_ADDR_W-1:0]   usr_ram_rd_addr_r1;
 
@@ -221,16 +222,19 @@ end
 
 always @*
 begin
-  rel_req_from_idle = 1'b0;
-  int_rden          = 1'b0;
-  load_rel_ack      = 1'b0;
-  sm_rel_ctrl       = 1'b1;
-  sm_rel_wren       = 1'b0;
+  rel_req_from_idle    = 1'b0;
+  int_rden             = 1'b0;
+  load_rel_ack         = 1'b0;
+  sm_rel_ctrl_mask_set = 1'b0;
+  sm_rel_ctrl_mask_clr = 1'b0;
+  sm_rel_ctrl          = 1'b1;
+  sm_rel_wren          = 1'b0;
   case(cs_rd_sm)
     IDLE:
     begin
-      rel_req_from_idle = rel_req;
-      sm_rel_ctrl       = rel_req;
+      rel_req_from_idle    = rel_req;
+      sm_rel_ctrl_mask_set = rel_req;
+      sm_rel_ctrl          = 1'b0;
     end
     PREFETCH:
     begin
@@ -248,14 +252,17 @@ begin
     end
     REL_DELAY1:
     begin
+      sm_rel_ctrl = ~sm_rel_ctrl_mask;
     end
     REL_DELAY2:
     begin
+      sm_rel_ctrl = ~sm_rel_ctrl_mask;
     end
     REL_WR2FL:
     begin
       sm_rel_wren  = 1'b1;
       load_rel_ack = ll_q[0];
+      sm_rel_ctrl_mask_clr = 1'b1;
     end
   endcase
 end
@@ -265,9 +272,8 @@ begin
   if (reset_n==1'b0)
   begin
     cs_rd_sm           <= 3'd0;
-    rden_r1            <= 1'b0;
-    int_rden_r1        <= 1'b0;
     load_req_r1        <= 1'b0;
+    sm_rel_ctrl_mask   <= 1'b0;
     ll_rd_addr         <= {FL_ADDR_W{1'b0}};
     ram_rd_addr        <= {RAM_ADDR_W{1'b0}};
     usr_ram_rd_addr_r1 <= {RAM_ADDR_W{1'b0}};
@@ -277,9 +283,10 @@ begin
   else
   begin
     cs_rd_sm           <= ns_rd_sm;
-    rden_r1            <= rden;
-    int_rden_r1        <= int_rden;
     load_req_r1        <= load_req;
+    sm_rel_ctrl_mask   <= sm_rel_ctrl_mask_set ? 1'b1 :
+                          sm_rel_ctrl_mask_clr ? 1'b0 :
+                                                 sm_rel_ctrl_mask;
 
     ll_rd_addr         <= load_req_p  || rel_req_from_idle                                                                     ? chunk_num     :
                           sm_rel_wren || ((!sm_rel_ctrl && rden && (usr_ram_rd_addr_r1[IN_CNK_ADDR_W-1:0]==(LINES_IN_CNK-1)))) ? nxt_chunk_ptr :
